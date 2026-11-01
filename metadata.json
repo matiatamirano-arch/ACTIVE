@@ -1,0 +1,6 @@
+{
+  "name": "Active Functional Studio - Plataforma de Alumnos y Rutinas",
+  "description": "Active Functional Studio: simplemente entrenamos personas con 100% pesos libres y movimiento. Rutinas personalizadas, método de mesociclo de 4 semanas, videos shorts de técnica y seguimiento de volumen de carga con Recharts.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
