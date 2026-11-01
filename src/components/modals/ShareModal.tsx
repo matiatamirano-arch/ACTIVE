@@ -27,8 +27,8 @@ export const ShareModal: React.FC<ShareModalProps> = ({ student, onClose }) => {
 
   const shareUrl = getStudentShareUrl(student);
 
-  const handleCopyLink = () => {
-    navigator.clipboard.writeText(shareUrl);
+  const handleCopyLink = async () => {
+    try { await navigator.clipboard.writeText(shareUrl); } catch { alert("No se pudo copiar. Seleccioná y copiá el enlace manualmente."); return; }
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
   };
@@ -143,7 +143,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({ student, onClose }) => {
               </button>
             </div>
             <p className="text-[11px] text-zinc-500 mt-1.5">
-              Tu alumna abrirá directamente su rutina en su móvil sin ver a otros alumnos ni al panel de profesor.
+              El alumno debe crear su acceso con el correo registrado en su ficha y confirmar ese correo. Después verá su planificación actualizada en este mismo enlace.
             </p>
           </div>
 

@@ -58,10 +58,10 @@ export const Header: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       const content = event.target?.result as string;
       if (content) {
-        const success = importBackupJSON(content);
+        const success = await importBackupJSON(content);
         if (success) {
           alert('¡Copia de seguridad importada con éxito!');
         } else {
@@ -104,24 +104,7 @@ export const Header: React.FC = () => {
                 </span>
               </div>
 
-              {/* Discreet coach unlock */}
-              <button
-                onClick={() => {
-                  const pin = prompt(
-                    'Ingresa el PIN de entrenador para acceder al panel de gestión (por defecto 1234):'
-                  );
-                  if (pin === '1234' || pin === 'admin' || pin === activeStudent?.pinCode) {
-                    openCoachMode();
-                  } else if (pin) {
-                    alert('PIN incorrecto. Acceso reservado para el profesor.');
-                  }
-                }}
-                className="flex items-center gap-1 text-[11px] text-zinc-400 hover:text-zinc-700 px-2 py-1 rounded-lg border border-transparent hover:border-zinc-200 transition-colors"
-                title="Acceso exclusivo del profesor"
-              >
-                <Lock className="w-3 h-3 text-zinc-400" />
-                <span className="hidden sm:inline">Acceso Profesor</span>
-              </button>
+
             </div>
           ) : (
             <>

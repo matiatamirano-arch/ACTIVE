@@ -128,6 +128,7 @@ export const RoutineBuilder: React.FC = () => {
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'idle'>('saved');
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const isInitialMount = useRef(true);
+  const lastLoadedId = useRef<string | null>(null);
   const lastSavedHashRef = useRef<string>(JSON.stringify(draftRoutine));
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -160,7 +161,8 @@ export const RoutineBuilder: React.FC = () => {
   React.useEffect(() => {
     if (editingRoutineId) {
       const found = routines.find((r) => r.id === editingRoutineId);
-      if (found) {
+      if (found && lastLoadedId.current !== found.id) {
+        lastLoadedId.current = found.id;
         setDraftRoutine(JSON.parse(JSON.stringify(found)));
         lastSavedHashRef.current = JSON.stringify(found);
         setActiveDayIndex(0);
@@ -186,17 +188,21 @@ export const RoutineBuilder: React.FC = () => {
       clearTimeout(autoSaveTimerRef.current);
     }
 
-    autoSaveTimerRef.current = setTimeout(() => {
-      if (routines.some((r) => r.id === draftRoutine.id)) {
-        updateRoutine(draftRoutine);
-      } else {
-        addRoutine(draftRoutine);
-      }
-      lastSavedHashRef.current = JSON.stringify(draftRoutine);
-      setSaveStatus('saved');
-      setLastSavedAt(
-        new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-      );
+    autoSaveTimerRef.current = setTimeout(async () => {
+      try {
+        let saved = draftRoutine;
+        if (!routines.some((r) => r.id === draftRoutine.id)) {
+          saved = addRoutine(draftRoutine);
+          lastLoadedId.current = saved.id;
+          setDraftRoutine(saved);
+          setEditingRoutineId(saved.id);
+        }
+        await updateRoutine(saved);
+        lastSavedHashRef.current = JSON.stringify(saved);
+        setSaveStatus('saved');
+        setLastSavedAt(new Date().toLocaleTimeString());
+      } catch { setSaveStatus('idle'); }
+
     }, 700);
 
     return () => {
@@ -209,22 +215,22 @@ export const RoutineBuilder: React.FC = () => {
   const activeDay: RoutineDay | undefined = draftRoutine.days[activeDayIndex] || draftRoutine.days[0];
 
   // Save routine manually
-  const handleSaveRoutine = () => {
-    if (autoSaveTimerRef.current) {
-      clearTimeout(autoSaveTimerRef.current);
-    }
-    if (routines.some((r) => r.id === draftRoutine.id)) {
-      updateRoutine(draftRoutine);
-    } else {
-      addRoutine(draftRoutine);
-    }
-    lastSavedHashRef.current = JSON.stringify(draftRoutine);
-    setSaveStatus('saved');
-    setLastSavedAt(
-      new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-    );
-    setSavedToast(true);
-    setTimeout(() => setSavedToast(false), 3000);
+  const handleSaveRoutine = async () => {
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    setSaveStatus('saving');
+    try {
+      let saved = draftRoutine;
+      if (!routines.some(r => r.id === draftRoutine.id)) {
+        saved = addRoutine(draftRoutine);
+        lastLoadedId.current = saved.id;
+        setDraftRoutine(saved);
+        setEditingRoutineId(saved.id);
+      }
+      await updateRoutine(saved);
+      lastSavedHashRef.current = JSON.stringify(saved);
+      setSaveStatus('saved'); setLastSavedAt(new Date().toLocaleTimeString());
+      setSavedToast(true); setTimeout(() => setSavedToast(false), 3000);
+    } catch { setSaveStatus('idle'); }
   };
 
   // Add new day to routine
@@ -651,7 +657,7 @@ export const RoutineBuilder: React.FC = () => {
           ) : (
             <span className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-zinc-100 border border-zinc-200 text-zinc-700 text-xs font-semibold">
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Guardado automático {lastSavedAt ? `(${lastSavedAt})` : ''}</span>
+              <span>{saveStatus === 'idle' ? 'No se confirmó el guardado. Volvé a guardar.' : `Guardado automático ${lastSavedAt || ''}`}</span>
             </span>
           )}
 

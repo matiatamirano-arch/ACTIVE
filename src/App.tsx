@@ -1,4 +1,6 @@
 import React from 'react';
+import { AuthProvider, useAuth } from './auth/AuthContext';
+import { AuthGate } from './auth/AuthGate';
 import { Header } from './components/Header';
 import { ExerciseBankView } from './components/coach/ExerciseBankView';
 import { MethodologyView } from './components/coach/MethodologyView';
@@ -42,10 +44,13 @@ const AppContent: React.FC = () => {
   );
 };
 
+function AuthenticatedGym() {
+  const { user } = useAuth();
+  return <GymProvider key={user?.uid}><AppContent /></GymProvider>;
+}
+
 export default function App() {
   return (
-    <GymProvider>
-      <AppContent />
-    </GymProvider>
+    <AuthProvider><AuthGate><AuthenticatedGym /></AuthGate></AuthProvider>
   );
 }

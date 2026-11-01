@@ -27,6 +27,7 @@ import {
   Youtube,
   Zap,
 } from 'lucide-react';
+import { useWorkoutDraft } from '../../lib/useWorkoutDraft';
 import { useGym } from '../../context/GymContext';
 import { Exercise, RoutineDay, RoutineExercise, SetLog, WorkoutSessionLog } from '../../types/gym';
 import { ActiveLogo } from '../brand/ActiveLogo';
@@ -43,7 +44,6 @@ export const StudentGymPortal: React.FC = () => {
     exercises,
     methodology,
     workoutLogs,
-    updateRoutine,
     setVideoModalExercise,
     saveWorkoutSessionLog,
     openCoachMode,
@@ -59,22 +59,14 @@ export const StudentGymPortal: React.FC = () => {
 
   // Student's active week (1, 2, 3, or 4)
   const [selectedWeek, setSelectedWeek] = useState<1 | 2 | 3 | 4>(
-    activeStudent?.currentProgramWeek || 2
+    activeStudent?.currentProgramWeek || 1
   );
 
   // Tracking state for active workout:
   // exerciseId -> sets: [ { actualWeight, actualReps, actualRir, completed } ]
-  const [sessionSets, setSessionSets] = useState<
-    Record<
-      string,
-      {
-        actualWeight: number;
-        actualReps: number;
-        actualRir: number;
-        completed: boolean;
-      }[]
-    >
-  >({});
+  const draft = useWorkoutDraft(activeStudent?.id, activeStudentRoutine?.id, (activeStudentRoutine?.days[selectedDayIndex] || activeStudentRoutine?.days[0])?.id, selectedWeek);
+  const { sessionSets, setSessionSets, coachFeedback, setCoachFeedback, finishRating, setFinishRating } = draft;
+  const [finishing, setFinishing] = useState(false);
 
   // Rest timer triggers
   const [timerSeconds, setTimerSeconds] = useState(120);
@@ -91,11 +83,12 @@ export const StudentGymPortal: React.FC = () => {
 
   // Finish modal
   const [showFinishModal, setShowFinishModal] = useState(false);
-  const [finishRating, setFinishRating] = useState(5);
-  const [coachFeedback, setCoachFeedback] = useState('');
   const [workoutFinishedSuccess, setWorkoutFinishedSuccess] = useState<WorkoutSessionLog | null>(
     null
   );
+
+  if (draft.loading) return <p className="p-8">Cargando tu entrenamiento…</p>;
+
 
   if (!activeStudent) {
     return (
@@ -319,24 +312,6 @@ export const StudentGymPortal: React.FC = () => {
       };
     });
 
-    // Real-time synchronization: when a student modifies actualWeight in Week 1,
-    // update the underlying routine base weight so subsequent weeks 2, 3, 4 recalculate immediately!
-    if (selectedWeek === 1 && typeof updates.actualWeight === 'number' && updates.actualWeight > 0) {
-      const updatedDays = routine.days.map((d) => ({
-        ...d,
-        exercises: d.exercises.map((re) => {
-          if (re.id !== exId) return re;
-          return {
-            ...re,
-            sets: re.sets.map((s, idx) =>
-              idx === setIdx ? { ...s, targetWeight: updates.actualWeight } : s
-            ),
-          };
-        }),
-      }));
-      updateRoutine({ ...routine, days: updatedDays });
-    }
-
     if (autoTriggerTimer && updates.completed) {
       setTimerSeconds(restSeconds || 120);
       setTimerTrigger(Date.now());
@@ -368,7 +343,11 @@ export const StudentGymPortal: React.FC = () => {
   const completionPercentage =
     totalRoutineSets > 0 ? Math.round((completedSetsCount / totalRoutineSets) * 100) : 0;
 
-  const handleFinishWorkout = () => {
+  const handleFinishWorkout = async () => {
+    if (finishing) return;
+    setFinishing(true);
+    try {
+    await draft.flush();
     const completedExercisesList = currentDay.exercises.map((re) => {
       const exData = exercises.find((e) => e.id === re.exerciseId);
       const setsLog: SetLog[] = re.sets.map((s, idx) => {
@@ -394,7 +373,7 @@ export const StudentGymPortal: React.FC = () => {
       };
     });
 
-    const savedLog = saveWorkoutSessionLog({
+    const savedLog = await saveWorkoutSessionLog({
       studentId: activeStudent.id,
       routineId: routine.id,
       routineName: routine.name,
@@ -411,6 +390,8 @@ export const StudentGymPortal: React.FC = () => {
 
     setWorkoutFinishedSuccess(savedLog);
     setShowFinishModal(false);
+    } catch { alert('No pudimos confirmar el guardado. Tus datos siguen en pantalla; volvé a intentarlo.'); }
+    finally { setFinishing(false); }
   };
 
   // Helper to render an exercise card
@@ -711,6 +692,7 @@ export const StudentGymPortal: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-zinc-50 text-zinc-900 pb-28">
+      <div role="status" className="text-xs p-3 bg-orange-50 text-orange-950">{draft.error || (draft.saving ? 'Guardando los cambios…' : 'Pesos, repeticiones y comentarios guardados automáticamente.')}{draft.error && <button className="underline ml-3" onClick={() => { void draft.flush().catch(() => {}); }}>Reintentar</button>}</div>
       {/* Top Mobile Bar with Active Functional Branding */}
       <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-zinc-200 px-4 py-3">
         <div className="max-w-4xl mx-auto flex items-center justify-between gap-3">
@@ -1637,6 +1619,7 @@ export const StudentGymPortal: React.FC = () => {
               </label>
               <textarea
                 rows={3}
+                maxLength={5000}
                 value={coachFeedback}
                 onChange={(e) => setCoachFeedback(e.target.value)}
                 placeholder="Ej: Cumplí las 4 reps con 85kg a RIR 1-2. Las pausas de 2 minutos fueron clave..."
@@ -1652,11 +1635,12 @@ export const StudentGymPortal: React.FC = () => {
                 Volver
               </button>
               <button
+                disabled={finishing || draft.saving}
                 onClick={handleFinishWorkout}
                 className="px-5 py-2 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-xs"
               >
                 <Send className="w-3.5 h-3.5" />
-                Guardar y Enviar al Coach
+                {finishing ? 'Guardando…' : 'Guardar y enviar al profe'}
               </button>
             </div>
           </div>
@@ -1700,7 +1684,7 @@ export const StudentGymPortal: React.FC = () => {
                 }}
                 className="flex-1 py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl text-xs transition-colors shadow-xs"
               >
-                Ver Mi Gráfico Recharts
+                Ver mi progreso
               </button>
               <button
                 onClick={() => setWorkoutFinishedSuccess(null)}

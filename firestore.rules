@@ -1,0 +1,79 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function owner() { return signedIn() && request.auth.uid == 'vgh76zcWT2cmLeSVK7hpdMOMvNn2'; }
+    function verified() { return signedIn() && request.auth.token.email_verified == true; }
+    function coach() { return owner() || (verified() && exists(/databases/$(database)/documents/coaches/$(request.auth.uid))); }
+    function student(studentId) {
+      return verified() && get(/databases/$(database)/documents/students/$(studentId)).data.email == request.auth.token.email;
+    }
+    match /coaches/{uid} {
+      allow get: if owner() || (signedIn() && request.auth.uid == uid);
+      allow list, create, update, delete: if owner();
+    }
+    match /students/{id} {
+      allow read: if coach() || (verified() && resource.data.email == request.auth.token.email);
+      allow create, update: if coach() && request.resource.data.id == id
+        && request.resource.data.email is string
+        && request.resource.data.email == request.resource.data.email.lower()
+        && request.resource.data.pinCode == '';
+      allow delete: if coach();
+    }
+    match /routines/{id} {
+      allow read: if coach() || student(resource.data.studentId);
+      allow create, update: if coach() && request.resource.data.id == id;
+      allow delete: if coach();
+    }
+    match /exercises/{id} {
+      allow read: if coach() || verified();
+      allow write: if coach();
+    }
+    match /settings/{id} {
+      allow read: if coach() || verified();
+      allow write: if coach();
+    }
+    function validLog(data) {
+      return data.keys().hasOnly(['id','studentId','routineId','routineName','dayId','dayName','programWeek','date','durationMinutes','completedExercises','studentRating','feedbackToCoach','totalVolumeKg'])
+        && data.studentId is string && data.routineId is string
+        && data.date is string && data.completedExercises is list
+        && data.totalVolumeKg is number && data.totalVolumeKg >= 0
+        && data.durationMinutes is number && data.durationMinutes >= 0
+        && data.programWeek in [1,2,3,4]
+        && (!('feedbackToCoach' in data) || (data.feedbackToCoach is string && data.feedbackToCoach.size() <= 5000))
+        && (!('studentRating' in data) || data.studentRating in [1,2,3,4,5]);
+    }
+    match /logs/{id} {
+      allow read: if coach() || student(resource.data.studentId);
+      allow create: if coach() || (validLog(request.resource.data)
+        && request.resource.data.id == id && id == request.resource.data.studentId + '_' + request.resource.data.routineId + '_' + string(request.resource.data.programWeek) + '_' + request.resource.data.dayId && student(request.resource.data.studentId)
+        && get(/databases/$(database)/documents/routines/$(request.resource.data.routineId)).data.studentId == request.resource.data.studentId);
+      allow update: if coach() || (validLog(request.resource.data) && request.resource.data.id == id
+        && student(resource.data.studentId)
+        && request.resource.data.studentId == resource.data.studentId
+        && request.resource.data.routineId == resource.data.routineId
+        && request.resource.data.dayId == resource.data.dayId
+        && request.resource.data.programWeek == resource.data.programWeek);
+      allow delete: if coach();
+    }
+    function validDraft(data) {
+      return data.keys().hasOnly(['studentId','routineId','dayId','week','updatedAt','sessionSets','coachFeedback','finishRating'])
+        && data.studentId is string && data.routineId is string && data.dayId is string
+        && data.week in [1,2,3,4] && data.sessionSets is map
+        && data.coachFeedback is string && data.coachFeedback.size() <= 5000
+        && data.finishRating in [1,2,3,4,5];
+    }
+    match /drafts/{id} {
+      // Deterministic ID allows checking ownership even before the document exists.
+      allow get: if coach() || (verified() && !exists(/databases/$(database)/documents/drafts/$(id))) || student(resource.data.studentId);
+      allow list: if coach() || student(resource.data.studentId);
+      allow create: if coach() || (validDraft(request.resource.data) && id == request.resource.data.studentId + '_' + request.resource.data.routineId + '_' + string(request.resource.data.week) + '_' + request.resource.data.dayId && student(request.resource.data.studentId)
+        && get(/databases/$(database)/documents/routines/$(request.resource.data.routineId)).data.studentId == request.resource.data.studentId);
+      allow update: if coach() || (validDraft(request.resource.data) && student(resource.data.studentId)
+        && request.resource.data.studentId == resource.data.studentId
+        && request.resource.data.routineId == resource.data.routineId
+        && request.resource.data.dayId == resource.data.dayId && request.resource.data.week == resource.data.week);
+      allow delete: if coach();
+    }
+  }
+}
