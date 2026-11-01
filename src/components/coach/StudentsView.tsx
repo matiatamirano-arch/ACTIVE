@@ -108,6 +108,7 @@ export const StudentsView: React.FC = () => {
     e.preventDefault();
     if (!formData.name.trim()) return;
 
+    try {
     if (editingStudent) {
       updateStudent({
         ...editingStudent,
@@ -117,6 +118,7 @@ export const StudentsView: React.FC = () => {
       addStudent(formData);
     }
     setShowModal(false);
+    } catch (error) { alert(error instanceof Error ? error.message : 'Revisá los datos del alumno.'); }
   };
 
   // Quick assignment of pre-configured methodology routines directly to a student
@@ -499,6 +501,7 @@ export const StudentsView: React.FC = () => {
                   <label className="block text-xs font-semibold text-zinc-700 mb-1">Email</label>
                   <input
                     type="email"
+                    required
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                     placeholder="alumno@gmail.com"
@@ -506,18 +509,7 @@ export const StudentsView: React.FC = () => {
                   />
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-700 mb-1">
-                    PIN de Acceso
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.pinCode}
-                    onChange={(e) => setFormData({ ...formData, pinCode: e.target.value })}
-                    placeholder="1234"
-                    className="w-full bg-white border border-zinc-300 rounded-xl px-3 py-2 text-xs sm:text-sm text-zinc-900 font-mono focus:outline-none focus:border-orange-500 shadow-2xs"
-                  />
-                </div>
+                <p className="text-xs text-zinc-500 self-center">El alumno crea su contraseña y confirma este correo al abrir el enlace.</p>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
